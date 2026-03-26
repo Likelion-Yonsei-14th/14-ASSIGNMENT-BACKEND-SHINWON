@@ -1,0 +1,2 @@
+# 14-ASSIGNMENT-BACKEND-SHINWON
+1주차 과제 실습입니다.
