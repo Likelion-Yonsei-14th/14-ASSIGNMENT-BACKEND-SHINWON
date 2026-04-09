@@ -7,3 +7,4 @@ public class PaymentService {
         Payment payment = new Payment(type, amount);
         payment.pay();
 }
+}

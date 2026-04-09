@@ -1,42 +1,134 @@
-# 📌 결제 시스템 리팩토링 과제
-
-## 🎯 과제 개요
-
-기존의 결제 시스템 코드를 분석하고,
-객체지향적으로 구조를 개선하는 것을 목표로 합니다.
-
+# 📌 3주차 객체지향 & DI 과제
 ---
-
-## 1️⃣ 기존 코드의 문제점
-
-* Payment 객체의 필드가 public으로 열려 있어 외부에서 값을 직접 수정할 수 있었습니다.
-* PaymentService가 객체 생성, 값 설정, 금액 검증, 결제 방식 판별까지 모두 담당하고 있어 책임이 과도하게 집중되어 있었습니다.
-* amount와 type에 대한 로직이 Payment가 아닌 Service에 있어 객체가 자신의 상태를 스스로 다루지 못했습니다.
-
-👉 캡슐화가 부족했고, 객체와 Service의 역할 분리가 명확하지 않았습니다.
-
+## 1️⃣ 문제 상황 분석
+현재 구조에서는 서비스 내부에서 `EmailSender`를 직접 생성해서 사용하고 있다. 
+이 구조의 가장 큰 문제는 구현체에 직접 의존하고 있다는 점이다.
+즉, 서비스는 “알림을 보낸다”라는 기능만 필요하지만 
+실제로는 `EmailSender`라는 구체 클래스에 강하게 결합되어 있는 상태이다.
+### ❌ 문제점
+-구현체에 직접 의존 → 유연성이 없음
+-새로운 알림 방식 추가 시 기존 코드 수정 필요
+-테스트 시 특정 구현체에 종속됨
+-유지보수 어려움 증가
 ---
-
-## 2️⃣ 로직 이동 내용
-
-### 🔹 변경 전
-
-* Payment는 단순히 데이터를 저장하는 역할만 했습니다.
-* PaymentService에서 금액 검증과 결제 방식 분기 로직을 직접 처리했습니다.
-
-### 🔹 변경 후
-
-* 금액 검증 로직은 Payment 내부 메서드로 이동했습니다.
-* 결제 방식 확인과 실제 결제 처리 로직도 Payment 내부로 이동했습니다.
-
-👉 amount와 type은 Payment의 상태이므로, 이 값에 대한 판단과 동작도 Payment가 직접 수행하도록 변경했습니다.
-
+### 📌 기능 확장 시 문제
+SMS, 푸시 알림 등이 추가될 경우 다음과 같은 코드가 발생할 수 있다:
+if(type.equals("email")) {
+sender = new EmailSender();
+} else if(type.equals("sms")) {
+sender = new SmsSender();
+}
+👉 문제점:
+-조건문 증가
+-코드 복잡도 증가
+-기능 추가 시 기존 코드 수정 필요
+➡️ 이는 OCP(Open-Closed Principle)를 위반하는 구조이다.
 ---
-
-## 3️⃣ 구조 개선 내용
-
-* Payment의 필드를 private으로 변경하고 생성자를 통해 초기화하도록 수정했습니다.
-* Payment가 자신의 상태를 검증하고 결제를 수행하는 객체가 되도록 개선했습니다.
-* PaymentService는 Payment 객체를 생성하고 결제를 요청하는 역할만 하도록 단순화했습니다.
-
-👉 이를 통해 객체의 책임이 더 명확해졌고, 코드의 응집도와 유지보수성이 좋아졌습니다.
+## 2️⃣ 인터페이스 도입 이유
+알림 기능에 인터페이스를 도입하면 구현체와의 결합을 줄일 수 있다.
+interface NotificationSender {
+void send();
+}
+각 알림 방식은 이를 구현한다:
+class EmailSender implements NotificationSender {}
+class SmsSender implements NotificationSender {}
+---
+### ✅ 장점
+-구현체 교체가 쉬움
+-코드 확장성 증가
+-테스트 용이 (Mock 사용 가능)
+-유지보수 편리
+---
+### ❗ 인터페이스만으로는 부족한 이유
+NotificationSender sender = new EmailSender();
+👉 여전히 서비스 내부에서 구현체를 선택하고 있음
+즉,
+-의존 대상은 인터페이스지만 
+-생성 책임은 여전히 서비스에 있음 
+➡️ 완전한 의존성 분리가 아님
+---
+## 3️⃣ DIP & DI
+### ✅ DIP (의존성 역전 원칙)
+>“고수준 모듈은 저수준 모듈에 의존하면 안 되고 
+둘 다 추상화에 의존해야 한다.”
+👉 기존 구조 
+-Service → EmailSender (구현체 의존)
+👉 개선 구조 
+-Service → NotificationSender (인터페이스 의존)
+---
+### ✅ DI (의존성 주입)
+DI는 객체를 직접 생성하지 않고 
+👉 외부에서 주입받는 방식
+class NotificationService {
+private final NotificationSender sender;
+public NotificationService(NotificationSender sender) {
+this.sender = sender;
+}
+}
+---
+### 🔥 직접 생성 vs DI
+| 방식 | 특징 |
+|------|------|
+| 직접 생성 | new EmailSender() → 강한 결합 |
+| DI 방식 | 외부 주입 → 느슨한 결합 |
+👉 DI의 장점:
+-구현체 교체 쉬움
+-테스트 용이
+-확장성 증가
+---
+## 4️⃣ 수동 DI 설계
+### ✅ 필요한 구성 요소
+1.NotificationSender (인터페이스) 
+2.EmailSender / SmsSender (구현체) 
+3.NotificationService (서비스) 
+4.AppConfig (설정 클래스) 
+---
+### ✅ 역할 정리
+-인터페이스 → 기능 정의 
+-구현체 → 실제 기능 수행 
+-서비스 → 비즈니스 로직 처리 
+-AppConfig → 객체 생성 및 의존성 연결 
+---
+### ✅ 객체 생성 위치
+객체 생성과 의존성 연결은 
+👉 반드시 외부(AppConfig)에서 수행해야 한다.
+class AppConfig {
+public NotificationService notificationService() {
+return new NotificationService(new EmailSender());
+}
+}
+👉 이렇게 하면
+-서비스는 구현체를 알 필요 없음
+-구조가 유연해짐
+---
+## 5️⃣ Spring DI의 필요성
+### ❌ 수동 DI의 한계
+-객체 생성 코드 증가 
+-설정 관리 복잡 
+-의존성 관계가 많아질수록 유지보수 어려움 
+-싱글톤 관리 직접 필요 
+---
+### ✅ Spring 사용 시 장점
+-객체 생성 자동화 
+-의존성 자동 주입 
+-싱글톤 자동 관리 
+-설정 간소화 
+---
+### ✅ 주요 어노테이션
+-@Configuration 
+→ 설정 클래스 지정 
+-@Bean 
+→ 객체를 Spring 컨테이너에 등록 
+-@ComponentScan 
+→ 자동으로 컴포넌트 탐색 및 등록 
+---
+## 6️⃣ 느낀 점
+이번 과제를 통해 단순한 객체지향 개념이 아니라 
+👉 왜 이런 구조를 사용하는지이해할 수 있었다.
+특히 
+-인터페이스만으로는 부족하고 
+-DI까지 적용해야 진짜 유연한 구조가 된다는 점이 중요했다.
+또한 Spring은 단순한 프레임워크가 아니라 
+👉 객체 생성과 의존성 관리 문제를 해결해주는 도구라는 것을 알게 되었다.
+앞으로는 기능 구현뿐만 아니라 
+👉 변경에 강한 설계를 항상 고민해야겠다고 느꼈다.
